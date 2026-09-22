@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#1677ff">
+    <title>Dasbor · Mabar Marketing</title>
+    <link rel="preload" as="style" href="http://127.0.0.1:8000/build/assets/app-uFjQ20ed.css" /><link rel="modulepreload" as="script" href="http://127.0.0.1:8000/build/assets/app-DrykSKOY.js" /><link rel="stylesheet" href="http://127.0.0.1:8000/build/assets/app-uFjQ20ed.css" /><script type="module" src="http://127.0.0.1:8000/build/assets/app-DrykSKOY.js"></script><script id="browser-logger-active">
+(function() {
+    const ENDPOINT = 'http://127.0.0.1:8000/_boost/browser-logs';
+    const logQueue = [];
+    let flushTimeout = null;
+    const captureTypes = ["error","warning","info","log","debug","table"];
+
+    console.log('🔍 Browser logger active (MCP server detected). Posting to: ' + ENDPOINT);
+
+    // Store original console methods
+    const originalConsole = {
+        log: console.log,
+        debug: console.debug,
+        info: console.info,
+        error: console.error,
+        warn: console.warn,
+        table: console.table
+    };
+
+    // Walk own enumerable keys so JSON.stringify cannot auto-invoke a proxy fake toJSON (e.g. Livewire's `$wire`) and fire a real request.
+    function toSafeValue(value, seen) {
+        if (value === null || typeof value !== 'object') {
+            return value;
+        }
+        if (value instanceof Error) {
+            return { name: value.name, message: value.message, stack: value.stack };
+        }
+        // Date has no own enumerable keys, so the walk below would collapse it to {}.
+        if (value instanceof Date) {
+            return value.toISOString();
+        }
+        if (seen.has(value)) {
+            return '[Circular]';
+        }
+        seen.add(value);
+        if (Array.isArray(value)) {
+            return value.map((item) => toSafeValue(item, seen));
+        }
+        const plain = {};
+        for (const key of Object.keys(value)) {
+            if (key === 'toJSON') continue;
+            try {
+                plain[key] = toSafeValue(value[key], seen);
+            } catch (e) {
+                plain[key] = '[Unreadable]';
+            }
+        }
+        return plain;
+    }
+
+    // Helper to safely stringify values
+    function safeStringify(obj) {
+        return JSON.stringify(toSafeValue(obj, new WeakSet()));
+    }
+
+    // Normalize log type for consistency (e.g., 'warn' to 'warning')
+    function normalizeType(type) {
+        return type === 'warn' ? 'warning' : type;
+    }
+
+    // Determine if a log type should be captured based on configured levels
+    function shouldCapture(type) {
+        return captureTypes.includes(normalizeType(type));
+    }
+
+    // Batch and send logs
+    function flushLogs() {
+        if (logQueue.length === 0) return;
+
+        const batch = logQueue.splice(0, logQueue.length);
+
+        fetch(ENDPOINT, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: JSON.stringify({ logs: batch })
+        }).catch(err => {
+            // Silently fail to avoid infinite loops
+            originalConsole.error('Failed to send logs:', err);
+        });
+    }
+
+    // Debounced flush (100ms)
+    function scheduleFlush() {
+        if (flushTimeout) clearTimeout(flushTimeout);
+        flushTimeout = setTimeout(flushLogs, 100);
+    }
+
+    // Intercept console methods
+    ['log', 'debug', 'info', 'error', 'warn', 'table'].forEach(method => {
+        console[method] = function(...args) {
+            // Call original method
+            originalConsole[method].apply(console, args);
+
+            // Capture log data
+            try {
+                if (!shouldCapture(method)) {
+                    return;
+                }
+
+                logQueue.push({
+                    type: method,
+                    timestamp: new Date().toISOString(),
+                    data: args.map(arg => {
+                        try {
+                            return typeof arg === 'object' ? JSON.parse(safeStringify(arg)) : arg;
+                        } catch (e) {
+                            return String(arg);
+                        }
+                    }),
+                    url: window.location.href,
+                    userAgent: navigator.userAgent
+                });
+
+                scheduleFlush();
+            } catch (e) {
+                // Fail silently
+            }
+        };
+    });
+
+    // Global error handlers for uncaught errors
+    const originalOnError = window.onerror;
+    window.onerror = function boostErrorHandler(errorMsg, url, lineNumber, colNumber, error) {
+        try {
+            if (shouldCapture('error')) {
+                logQueue.push({
+                    type: 'uncaught_error',
+                    timestamp: new Date().toISOString(),
+                    data: [{
+                        message: errorMsg,
+                        filename: url,
+                        lineno: lineNumber,
+                        colno: colNumber,
+                        error: error ? {
+                            name: error.name,
+                            message: error.message,
+                            stack: error.stack
+                        } : null
+                    }],
+                    url: window.location.href,
+                    userAgent: navigator.userAgent
+                });
+
+                scheduleFlush();
+            }
+
+        } catch (e) {
+            // Fail silently
+        }
+
+        // Call original handler if it exists
+        if (originalOnError && typeof originalOnError === 'function') {
+            return originalOnError(errorMsg, url, lineNumber, colNumber, error);
+        }
+
+        // Let the error continue to propagate
+        return false;
+    }
+    window.addEventListener('error', (event) => {
+        try {
+            if (!shouldCapture('error')) {
+                return false;
+            }
+
+            logQueue.push({
+                type: 'window_error',
+                timestamp: new Date().toISOString(),
+                data: [{
+                    message: event.message,
+                    filename: event.filename,
+                    lineno: event.lineno,
+                    colno: event.colno,
+                    error: event.error ? {
+                        name: event.error.name,
+                        message: event.error.message,
+                        stack: event.error.stack
+                    } : null
+                }],
+                url: window.location.href,
+                userAgent: navigator.userAgent
+            });
+
+            scheduleFlush();
+        } catch (e) {
+            // Fail silently
+        }
+
+        // Let the error continue to propagate
+        return false;
+    });
+    window.addEventListener('unhandledrejection', (event) => {
+        try {
+            if (!shouldCapture('error')) {
+                return false;
+            }
+
+            logQueue.push({
+                type: 'error',
+                timestamp: new Date().toISOString(),
+                data: [{
+                    message: 'Unhandled Promise Rejection',
+                    reason: toSafeValue(event.reason, new WeakSet())
+                }],
+                url: window.location.href,
+                userAgent: navigator.userAgent
+            });
+
+            scheduleFlush();
+        } catch (e) {
+            // Fail silently
+        }
+
+        // Let the rejection continue to propagate
+        return false;
+    });
+
+    // Flush on page unload
+    window.addEventListener('beforeunload', () => {
+        if (logQueue.length > 0) {
+            navigator.sendBeacon(ENDPOINT, JSON.stringify({ logs: logQueue }));
+        }
+    });
+})();
+</script>
+</head>
+<body class="bg-[#f5f7fa] font-sans text-sm text-slate-700 antialiased">
+    <a class="lewati-konten" href="#konten-utama">Lewati ke konten</a>
+    <aside class="fixed inset-y-0 left-0 z-20 hidden w-60 flex-col border-r border-slate-200/80 bg-white px-4 py-7 lg:flex"><a href="http://127.0.0.1:8000/dasbor" class="mb-10 flex items-center gap-3 px-3" aria-label="Mabar Marketing — Dasbor">
+    <span class="flex size-10 items-center justify-center rounded-xl bg-blue-600 text-xl font-bold text-white shadow-sm">m<span class="text-blue-200">.</span></span>
+    <span class="text-xl font-bold tracking-tight text-slate-900">mabar<span class="block text-[10px] font-medium tracking-[.22em] text-slate-400">MARKETING SPACE</span></span>
+</a>
+<p class="mb-3 px-4 text-[10px] font-semibold tracking-[.16em] text-slate-400">RUANG KERJA</p>
+<nav aria-label="Menu utama" class="flex flex-col gap-1.5">
+    <a href="http://127.0.0.1:8000/dasbor" class="tautan-menu" ><svg class="size-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+     <rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/> </svg>
+Dasbor</a>
+    <div class="mx-4 my-3 border-t border-slate-100"></div>
+    <p class="mb-2 px-4 text-[10px] font-semibold tracking-[.16em] text-slate-400">MANAJEMEN MARKETING</p>
+            <a href="http://127.0.0.1:8000/kampanye" class="tautan-menu" ><svg class="size-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+     <path d="m4 10 13-5v14L4 14zM4 10H2v4h2m3 1 1 5h3l-1-4m10-7 2-1m-2 8 2 1"/> </svg>
+<span>Kampanye</span></a>
+            <a href="http://127.0.0.1:8000/prospek" class="tautan-menu" ><svg class="size-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+     <circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3m2-17a3 3 0 0 1 0 6m1 4a5 5 0 0 1 3 4v3"/> </svg>
+<span>Prospek</span></a>
+            <a href="http://127.0.0.1:8000/media-sosial" class="tautan-menu" ><svg class="size-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+     <circle cx="6" cy="12" r="3"/><circle cx="18" cy="5" r="3"/><circle cx="18" cy="19" r="3"/><path d="m9 10 6-4m-6 8 6 4"/> </svg>
+<span>Media Sosial</span></a>
+            <a href="http://127.0.0.1:8000/aset-digital" class="tautan-menu" ><svg class="size-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+     <path d="M3 7V5a2 2 0 0 1 2-2h5l3 3h6a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="m7 17 3-4 3 3 2-2 3 3"/> </svg>
+<span>Aset Digital</span></a>
+            <a href="http://127.0.0.1:8000/konten" class="tautan-menu" ><svg class="size-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+     <rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8m-8 4h5"/> </svg>
+<span>Konten</span></a>
+    </nav>
+<div class="mt-auto pt-10">
+    <div class="rounded-xl border border-blue-100 bg-blue-50/60 p-4">
+        <span class="mb-2 block text-xs font-semibold text-blue-700">Ruang untuk ide besar.</span>
+        <p class="text-xs leading-5 text-slate-500">Semua aktivitas marketing, dalam satu tempat.</p>
+        <span class="mt-4 inline-flex items-center gap-1.5 text-[10px] font-medium text-slate-500"><span class="size-1.5 rounded-full bg-amber-400"></span> Versi pratinjau</span>
+    </div>
+    <div class="mt-5 flex items-center gap-3 border-t border-slate-100 px-2 pt-5"><span class="flex size-9 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600">MK</span><div><p class="text-xs font-semibold">Tim Marketing</p><p class="mt-0.5 text-[10px] text-slate-400">Ruang kerja pratinjau</p></div></div>
+</div>
+</aside>
+    <dialog id="menu-ponsel" aria-label="Navigasi marketing" class="menu-ponsel">
+        <button type="button" id="tutup-menu" class="tombol-ikon absolute right-3 top-3" aria-label="Tutup menu"><svg class="size-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+     <path d="m6 6 12 12M6 18 18 6"/> </svg>
+</button>
+        <div class="flex min-h-full flex-col px-4 py-7"><a href="http://127.0.0.1:8000/dasbor" class="mb-10 flex items-center gap-3 px-3" aria-label="Mabar Marketing — Dasbor">
+    <span class="flex size-10 items-center justify-center rounded-xl bg-blue-600 text-xl font-bold text-white shadow-sm">m<span class="text-blue-200">.</span></span>
+    <span class="text-xl font-bold tracking-tight text-slate-900">mabar<span class="block text-[10px] font-medium tracking-[.22em] text-slate-400">MARKETING SPACE</span></span>
+</a>
+<p class="mb-3 px-4 text-[10px] font-semibold tracking-[.16em] text-slate-400">RUANG KERJA</p>
+<nav aria-label="Menu utama" class="flex flex-col gap-1.5">
+    <a href="http://127.0.0.1:8000/dasbor" class="tautan-menu" ><svg class="size-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+     <rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/> </svg>
+Dasbor</a>
+    <div class="mx-4 my-3 border-t border-slate-100"></div>
+    <p class="mb-2 px-4 text-[10px] font-semibold tracking-[.16em] text-slate-400">MANAJEMEN MARKETING</p>
+            <a href="http://127.0.0.1:8000/kampanye" class="tautan-menu" ><svg class="size-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+     <path d="m4 10 13-5v14L4 14zM4 10H2v4h2m3 1 1 5h3l-1-4m10-7 2-1m-2 8 2 1"/> </svg>
+<span>Kampanye</span></a>
+            <a href="http://127.0.0.1:8000/prospek" class="tautan-menu" ><svg class="size-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+     <circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3m2-17a3 3 0 0 1 0 6m1 4a5 5 0 0 1 3 4v3"/> </svg>
+<span>Prospek</span></a>
+            <a href="http://127.0.0.1:8000/media-sosial" class="tautan-menu" ><svg class="size-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+     <circle cx="6" cy="12" r="3"/><circle cx="18" cy="5" r="3"/><circle cx="18" cy="19" r="3"/><path d="m9 10 6-4m-6 8 6 4"/> </svg>
+<span>Media Sosial</span></a>
+            <a href="http://127.0.0.1:8000/aset-digital" class="tautan-menu" ><svg class="size-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+     <path d="M3 7V5a2 2 0 0 1 2-2h5l3 3h6a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="m7 17 3-4 3 3 2-2 3 3"/> </svg>
+<span>Aset Digital</span></a>
+            <a href="http://127.0.0.1:8000/konten" class="tautan-menu" ><svg class="size-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+     <rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8m-8 4h5"/> </svg>
+<span>Konten</span></a>
+    </nav>
+<div class="mt-auto pt-10">
+    <div class="rounded-xl border border-blue-100 bg-blue-50/60 p-4">
+        <span class="mb-2 block text-xs font-semibold text-blue-700">Ruang untuk ide besar.</span>
+        <p class="text-xs leading-5 text-slate-500">Semua aktivitas marketing, dalam satu tempat.</p>
+        <span class="mt-4 inline-flex items-center gap-1.5 text-[10px] font-medium text-slate-500"><span class="size-1.5 rounded-full bg-amber-400"></span> Versi pratinjau</span>
+    </div>
+    <div class="mt-5 flex items-center gap-3 border-t border-slate-100 px-2 pt-5"><span class="flex size-9 items-center justify-center rounded-full bg-slate-100 text-xs font-semibold text-slate-600">MK</span><div><p class="text-xs font-semibold">Tim Marketing</p><p class="mt-0.5 text-[10px] text-slate-400">Ruang kerja pratinjau</p></div></div>
+</div>
+</div>
+    </dialog>
+    <div class="min-h-screen lg:pl-60">
+        <header class="flex min-h-18 items-center justify-between gap-3 border-b border-slate-200/80 bg-white px-4 sm:px-8">
+            <div class="flex min-w-0 items-center gap-3"><button id="buka-menu" type="button" class="tombol-ikon lg:hidden" aria-label="Buka menu" aria-controls="menu-ponsel" aria-expanded="false"><svg class="size-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+     <path d="M4 6h16M4 12h16M4 18h16"/> </svg>
+</button><span class="hidden text-slate-400 sm:inline">Ruang kerja</span><span class="hidden text-slate-300 sm:inline">/</span><span class="truncate font-medium text-slate-800">Dasbor</span></div>
+            <span class="inline-flex shrink-0 items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5 text-[11px] font-medium text-blue-700"><span class="size-1.5 rounded-full bg-blue-500"></span>Pratinjau</span>
+        </header>
+        <main id="konten-utama" tabindex="-1" class="mx-auto max-w-[1600px] px-4 py-7 outline-none sm:px-8 sm:py-8"><div class="mb-7 flex flex-wrap items-start justify-between gap-4">
+    <div><p class="mb-2 text-xs font-medium text-blue-600">SELAMAT DATANG DI MABAR</p><h1 class="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">Marketing yang lebih terarah.</h1><p class="mt-2 text-sm leading-6 text-slate-500">Satu ruang untuk kampanye, relasi, dan cerita brand Anda.</p></div>
+    <a class="tombol-sekunder" href="#modul-marketing">Jelajahi modul <svg class="size-5 shrink-0 size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+     <path d="M5 12h14m-5-5 5 5-5 5"/> </svg>
+</a>
+</div>
+<div class="mb-7 flex items-start gap-3 rounded-lg border border-blue-100 bg-blue-50/70 px-4 py-3 text-xs leading-5 text-blue-800"><svg class="size-5 shrink-0 mt-0.5 size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+     <circle cx="12" cy="12" r="9"/><path d="M12 11v6m0-10v.1"/> </svg>
+<p><strong class="font-semibold">Ruang kerja sedang disiapkan.</strong> Jelajahi menu untuk melihat kerangka setiap modul. Data dan fitur pengelolaan akan tersedia pada tahap berikutnya.</p></div>
+<div class="mb-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <section class="panel p-5"><div class="flex items-center justify-between gap-3"><h2 class="text-xs font-medium text-slate-500">Kampanye aktif</h2><span class="kotak-ikon blue"><svg class="size-5 shrink-0 size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+     <path d="m4 10 13-5v14L4 14zM4 10H2v4h2m3 1 1 5h3l-1-4m10-7 2-1m-2 8 2 1"/> </svg>
+</span></div><p class="my-3 text-3xl font-semibold text-slate-300" aria-label="Data belum tersedia">—</p><p class="text-[11px] text-slate-400">Menunggu data pertama</p></section>
+            <section class="panel p-5"><div class="flex items-center justify-between gap-3"><h2 class="text-xs font-medium text-slate-500">Prospek baru</h2><span class="kotak-ikon violet"><svg class="size-5 shrink-0 size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+     <circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3m2-17a3 3 0 0 1 0 6m1 4a5 5 0 0 1 3 4v3"/> </svg>
+</span></div><p class="my-3 text-3xl font-semibold text-slate-300" aria-label="Data belum tersedia">—</p><p class="text-[11px] text-slate-400">Menunggu data pertama</p></section>
+            <section class="panel p-5"><div class="flex items-center justify-between gap-3"><h2 class="text-xs font-medium text-slate-500">Belanja iklan</h2><span class="kotak-ikon emerald"><svg class="size-5 shrink-0 size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+     <rect x="3" y="5" width="18" height="15" rx="2"/><path d="M3 8h18m0 4h-6v5h6m-3-2.5h.1"/> </svg>
+</span></div><p class="my-3 text-3xl font-semibold text-slate-300" aria-label="Data belum tersedia">—</p><p class="text-[11px] text-slate-400">Menunggu data pertama</p></section>
+            <section class="panel p-5"><div class="flex items-center justify-between gap-3"><h2 class="text-xs font-medium text-slate-500">Konten terjadwal</h2><span class="kotak-ikon orange"><svg class="size-5 shrink-0 size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+     <rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 11h18m-13 4h2m4 0h2"/> </svg>
+</span></div><p class="my-3 text-3xl font-semibold text-slate-300" aria-label="Data belum tersedia">—</p><p class="text-[11px] text-slate-400">Menunggu data pertama</p></section>
+    </div>
+<div class="mb-8 grid gap-5 xl:grid-cols-[1.65fr_1fr]">
+    <section class="panel flex min-h-72 flex-col"><div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-5 py-4"><h2 class="font-semibold text-slate-800">Ringkasan performa</h2><span class="text-[11px] text-slate-400">Kampanye & prospek</span></div><div class="flex flex-1 flex-col items-center justify-center px-5 py-9 text-center"><span class="mb-4 flex size-14 items-center justify-center rounded-2xl border border-slate-100 bg-slate-50 text-blue-400"><svg class="size-5 shrink-0 size-7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+     <path d="M4 3v17h17M8 15l4-5 4 3 5-7"/> </svg>
+</span><h3 class="text-sm font-medium text-slate-700">Cerita pertumbuhan Anda dimulai di sini</h3><p class="mt-2 max-w-xs text-xs leading-5 text-slate-400">Grafik performa akan tampil setelah data kampanye dan prospek tersedia.</p></div></section>
+    <section class="panel"><div class="flex items-center justify-between border-b border-slate-100 px-5 py-4"><h2 class="font-semibold text-slate-800">Agenda konten</h2><svg class="size-5 shrink-0 size-4 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+     <rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 11h18m-13 4h2m4 0h2"/> </svg>
+</div><div class="flex flex-col items-center px-5 py-8 text-center"><div class="mb-4 grid grid-cols-3 gap-1.5" aria-hidden="true"><span class="size-5 rounded bg-slate-100"></span><span class="size-5 rounded bg-slate-100"></span><span class="size-5 rounded bg-slate-100"></span><span class="size-5 rounded bg-slate-100"></span><span class="size-5 rounded bg-blue-100"></span><span class="size-5 rounded bg-slate-100"></span><span class="size-5 rounded bg-slate-100"></span><span class="size-5 rounded bg-slate-100"></span><span class="size-5 rounded bg-slate-100"></span></div><h3 class="text-sm font-medium">Belum ada agenda</h3><p class="mt-2 text-xs text-slate-400">Rencana publikasi Anda akan muncul di sini.</p><a href="http://127.0.0.1:8000/konten" class="mt-3 inline-flex min-h-11 items-center gap-2 text-xs font-medium text-blue-600 hover:text-blue-800">Lihat ruang konten <svg class="size-5 shrink-0 size-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+     <path d="M5 12h14m-5-5 5 5-5 5"/> </svg>
+</a></div></section>
+</div>
+<section id="modul-marketing" class="scroll-mt-5">
+    <div class="mb-4 flex flex-wrap items-center justify-between gap-2"><div><h2 class="text-base font-semibold text-slate-900">Ruang marketing Anda</h2><p class="mt-1 text-xs text-slate-500">Semua yang Anda perlukan, terhubung dalam satu tempat.</p></div><span class="text-xs text-slate-400">5 modul tersedia untuk dijelajahi</span></div>
+    <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                    <a href="http://127.0.0.1:8000/kampanye" class="panel group flex flex-col p-5 transition hover:border-blue-200 hover:shadow-sm"><div class="mb-4 flex items-center justify-between"><span class="kotak-ikon blue"><svg class="size-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+     <path d="m4 10 13-5v14L4 14zM4 10H2v4h2m3 1 1 5h3l-1-4m10-7 2-1m-2 8 2 1"/> </svg>
+</span><span class="rounded bg-slate-100 px-2 py-1 text-[10px] text-slate-500">Segera hadir</span></div><h3 class="font-semibold text-slate-800">Ads / Kampanye</h3><p class="mt-2 flex-1 text-xs leading-5 text-slate-500">Satu tempat untuk merencanakan kampanye dan memantau aktivitas iklan Anda.</p><span class="mt-5 inline-flex items-center gap-2 text-xs font-medium text-blue-600">Jelajahi modul <svg class="size-5 shrink-0 size-4 transition group-hover:translate-x-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+     <path d="M5 12h14m-5-5 5 5-5 5"/> </svg>
+</span></a>
+                    <a href="http://127.0.0.1:8000/prospek" class="panel group flex flex-col p-5 transition hover:border-blue-200 hover:shadow-sm"><div class="mb-4 flex items-center justify-between"><span class="kotak-ikon blue"><svg class="size-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+     <circle cx="9" cy="8" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3m2-17a3 3 0 0 1 0 6m1 4a5 5 0 0 1 3 4v3"/> </svg>
+</span><span class="rounded bg-slate-100 px-2 py-1 text-[10px] text-slate-500">Segera hadir</span></div><h3 class="font-semibold text-slate-800">Leads / Prospek</h3><p class="mt-2 flex-1 text-xs leading-5 text-slate-500">Bangun hubungan yang lebih baik, dari kontak pertama hingga menjadi pelanggan.</p><span class="mt-5 inline-flex items-center gap-2 text-xs font-medium text-blue-600">Jelajahi modul <svg class="size-5 shrink-0 size-4 transition group-hover:translate-x-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+     <path d="M5 12h14m-5-5 5 5-5 5"/> </svg>
+</span></a>
+                    <a href="http://127.0.0.1:8000/media-sosial" class="panel group flex flex-col p-5 transition hover:border-blue-200 hover:shadow-sm"><div class="mb-4 flex items-center justify-between"><span class="kotak-ikon blue"><svg class="size-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+     <circle cx="6" cy="12" r="3"/><circle cx="18" cy="5" r="3"/><circle cx="18" cy="19" r="3"/><path d="m9 10 6-4m-6 8 6 4"/> </svg>
+</span><span class="rounded bg-slate-100 px-2 py-1 text-[10px] text-slate-500">Segera hadir</span></div><h3 class="font-semibold text-slate-800">Media Sosial</h3><p class="mt-2 flex-1 text-xs leading-5 text-slate-500">Satukan akun, aktivitas, dan perkembangan media sosial brand Anda.</p><span class="mt-5 inline-flex items-center gap-2 text-xs font-medium text-blue-600">Jelajahi modul <svg class="size-5 shrink-0 size-4 transition group-hover:translate-x-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+     <path d="M5 12h14m-5-5 5 5-5 5"/> </svg>
+</span></a>
+                    <a href="http://127.0.0.1:8000/aset-digital" class="panel group flex flex-col p-5 transition hover:border-blue-200 hover:shadow-sm"><div class="mb-4 flex items-center justify-between"><span class="kotak-ikon blue"><svg class="size-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+     <path d="M3 7V5a2 2 0 0 1 2-2h5l3 3h6a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="m7 17 3-4 3 3 2-2 3 3"/> </svg>
+</span><span class="rounded bg-slate-100 px-2 py-1 text-[10px] text-slate-500">Segera hadir</span></div><h3 class="font-semibold text-slate-800">Aset Digital</h3><p class="mt-2 flex-1 text-xs leading-5 text-slate-500">Rapikan gambar, video, dan materi brand dalam satu pustaka bersama.</p><span class="mt-5 inline-flex items-center gap-2 text-xs font-medium text-blue-600">Jelajahi modul <svg class="size-5 shrink-0 size-4 transition group-hover:translate-x-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+     <path d="M5 12h14m-5-5 5 5-5 5"/> </svg>
+</span></a>
+                    <a href="http://127.0.0.1:8000/konten" class="panel group flex flex-col p-5 transition hover:border-blue-200 hover:shadow-sm"><div class="mb-4 flex items-center justify-between"><span class="kotak-ikon blue"><svg class="size-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+     <rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 7h8M8 11h8m-8 4h5"/> </svg>
+</span><span class="rounded bg-slate-100 px-2 py-1 text-[10px] text-slate-500">Segera hadir</span></div><h3 class="font-semibold text-slate-800">Konten</h3><p class="mt-2 flex-1 text-xs leading-5 text-slate-500">Bawa ide menjadi cerita. Rencanakan konten dan jadwal publikasi Anda.</p><span class="mt-5 inline-flex items-center gap-2 text-xs font-medium text-blue-600">Jelajahi modul <svg class="size-5 shrink-0 size-4 transition group-hover:translate-x-1" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+     <path d="M5 12h14m-5-5 5 5-5 5"/> </svg>
+</span></a>
+                <div class="flex flex-col justify-center rounded-xl border border-dashed border-slate-300 bg-slate-50/50 p-6"><span class="mb-3 text-xl text-blue-400" aria-hidden="true">✦</span><h3 class="font-medium text-slate-700">Lebih rapi. Lebih fokus.</h3><p class="mt-2 text-xs leading-6 text-slate-500">Kurangi perpindahan alat.<br>Berikan lebih banyak ruang untuk ide.</p></div>
+    </div>
+</section>
+</main>
+        <footer class="mx-4 flex flex-wrap justify-between gap-2 border-t border-slate-200 py-5 text-[11px] text-slate-400 sm:mx-8"><span>Mabar Marketing · Ruang kerja untuk bertumbuh</span><span>Kerangka aplikasi · v0.1</span></footer>
+    </div>
+</body>
+</html>
