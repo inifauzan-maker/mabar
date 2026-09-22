@@ -1,0 +1,83 @@
+<mxfile host="app.diagrams.net" modified="2026-09-22T00:00:00.000Z" agent="GitHub Copilot" version="24.7.17">
+  <diagram id="mabar-erd" name="ERD Mabar Marketing">
+    <mxGraphModel dx="1500" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1600" pageHeight="1200" math="0" shadow="0">
+      <root>
+        <mxCell id="title" value="ERD Mabar Marketing" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;fontSize=22;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="480" y="20" width="300" height="40" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="users" value="users&#xa;PK id&#xa;name&#xa;email&#xa;password&#xa;role&#xa;created_at&#xa;updated_at" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dbeafe;strokeColor=#2563eb;align=left;verticalAlign=top;fontSize=12;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="80" y="120" width="180" height="180" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="campaigns" value="campaigns&#xa;PK id&#xa;name&#xa;channel&#xa;budget&#xa;status&#xa;created_by FK&#xa;created_at&#xa;updated_at" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#dcfce7;strokeColor=#16a34a;align=left;verticalAlign=top;fontSize=12;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="420" y="120" width="220" height="180" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="prospects" value="prospects&#xa;PK id&#xa;name&#xa;source&#xa;stage&#xa;assigned_to FK&#xa;campaign_id FK&#xa;created_at&#xa;updated_at" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#ede9fe;strokeColor=#7c3aed;align=left;verticalAlign=top;fontSize=12;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="760" y="120" width="220" height="180" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="social_accounts" value="social_accounts&#xa;PK id&#xa;name&#xa;platform&#xa;status&#xa;owner_id FK&#xa;created_at&#xa;updated_at" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fff7ed;strokeColor=#f59e0b;align=left;verticalAlign=top;fontSize=12;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="80" y="420" width="190" height="180" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="digital_assets" value="digital_assets&#xa;PK id&#xa;name&#xa;file_type&#xa;category&#xa;owner_id FK&#xa;created_at&#xa;updated_at" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#fef2f2;strokeColor=#ef4444;align=left;verticalAlign=top;fontSize=12;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="420" y="420" width="220" height="180" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="contents" value="contents&#xa;PK id&#xa;title&#xa;channel&#xa;schedule&#xa;status&#xa;created_by FK&#xa;campaign_id FK&#xa;social_account_id FK&#xa;created_at&#xa;updated_at" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f0fdf4;strokeColor=#22c55e;align=left;verticalAlign=top;fontSize=12;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="760" y="420" width="240" height="200" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="roles" value="roles&#xa;PK id&#xa;name&#xa;slug&#xa;created_at&#xa;updated_at" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#e0f2fe;strokeColor=#0ea5e9;align=left;verticalAlign=top;fontSize=12;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="80" y="680" width="170" height="120" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="users_roles" value="users_roles&#xa;PK id&#xa;user_id FK&#xa;role_id FK&#xa;created_at" style="rounded=0;whiteSpace=wrap;html=1;fillColor=#f3e8ff;strokeColor=#a855f7;align=left;verticalAlign=top;fontSize=12;spacing=8;" vertex="1" parent="1">
+          <mxGeometry x="420" y="680" width="180" height="120" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="edge1" value="1:N" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=ERone;endFill=0;startArrow=none;strokeColor=#64748b;" edge="1" parent="1" source="users" target="campaigns">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="edge2" value="1:N" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=ERone;endFill=0;startArrow=none;strokeColor=#64748b;" edge="1" parent="1" source="users" target="prospects">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="edge3" value="1:N" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=ERone;endFill=0;startArrow=none;strokeColor=#64748b;" edge="1" parent="1" source="campaigns" target="prospects">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="edge4" value="1:N" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=ERone;endFill=0;startArrow=none;strokeColor=#64748b;" edge="1" parent="1" source="users" target="social_accounts">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="edge5" value="1:N" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=ERone;endFill=0;startArrow=none;strokeColor=#64748b;" edge="1" parent="1" source="users" target="digital_assets">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="edge6" value="1:N" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=ERone;endFill=0;startArrow=none;strokeColor=#64748b;" edge="1" parent="1" source="users" target="contents">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="edge7" value="1:N" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=ERone;endFill=0;startArrow=none;strokeColor=#64748b;" edge="1" parent="1" source="campaigns" target="contents">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="edge8" value="1:N" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=ERone;endFill=0;startArrow=none;strokeColor=#64748b;" edge="1" parent="1" source="social_accounts" target="contents">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="edge9" value="N:M" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=ERmany;endFill=0;startArrow=none;strokeColor=#64748b;" edge="1" parent="1" source="roles" target="users_roles">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+
+        <mxCell id="edge10" value="N:M" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;endArrow=ERmany;endFill=0;startArrow=none;strokeColor=#64748b;" edge="1" parent="1" source="users" target="users_roles">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
