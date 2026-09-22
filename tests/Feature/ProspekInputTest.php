@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Prospek;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -38,6 +39,41 @@ class ProspekInputTest extends TestCase
         $this->assertDatabaseHas('prospects', [
             'name' => 'Rizky Putra',
             'phone' => '081234567890',
+        ]);
+    }
+
+    public function test_marketing_user_can_open_detail_and_update_prospect_stage(): void
+    {
+        $user = User::factory()->create([
+            'email' => 'marketing2@example.com',
+            'role' => 'marketing',
+        ]);
+
+        $prospect = Prospek::create([
+            'name' => 'Nanda Wijaya',
+            'phone' => '081122334455',
+            'city' => 'Jakarta',
+            'source' => 'Instagram',
+            'stage' => 'new',
+            'assigned_to' => $user->id,
+            'notes' => 'Butuh follow-up cepat',
+        ]);
+
+        $this->actingAs($user)
+            ->get('/prospek/'.$prospect->id)
+            ->assertOk()
+            ->assertSee('Detail Prospek')
+            ->assertSee('Nanda Wijaya');
+
+        $this->actingAs($user)
+            ->post('/prospek/'.$prospect->id.'/status', [
+                'stage' => 'qualified',
+            ])
+            ->assertRedirect('/prospek/'.$prospect->id);
+
+        $this->assertDatabaseHas('prospects', [
+            'id' => $prospect->id,
+            'stage' => 'qualified',
         ]);
     }
 }

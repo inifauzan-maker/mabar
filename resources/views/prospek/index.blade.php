@@ -137,23 +137,51 @@
         <aside class="panel p-5 sm:p-6">
             <div class="mb-4 flex items-center justify-between">
                 <h2 class="text-lg font-semibold text-slate-800">Ringkasan</h2>
-                <span class="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-medium text-slate-600">{{ $prospects->count() }} lead</span>
+                <span class="rounded-full bg-slate-100 px-2 py-1 text-[10px] font-medium text-slate-600">{{ $stats['total'] }} lead</span>
             </div>
 
-            <ul class="space-y-3 text-sm text-slate-600">
-                <li class="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">Lead baru dapat ditangani langsung oleh PIC marketing.</li>
-                <li class="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">Tahapan bisa dipandu dari baru → dikontak → qualified → closed.</li>
-                <li class="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">Kampanye dan penanggung jawab dapat dipetakan untuk tracking lebih rapi.</li>
-            </ul>
+            <div class="space-y-3 text-sm">
+                <div class="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+                    <div class="text-slate-500">Baru</div>
+                    <div class="mt-1 text-lg font-semibold text-slate-800">{{ $stats['new'] }}</div>
+                </div>
+                <div class="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+                    <div class="text-slate-500">Qualified</div>
+                    <div class="mt-1 text-lg font-semibold text-slate-800">{{ $stats['qualified'] }}</div>
+                </div>
+                <div class="rounded-xl border border-slate-100 bg-slate-50 px-3 py-2">
+                    <div class="text-slate-500">Closed</div>
+                    <div class="mt-1 text-lg font-semibold text-slate-800">{{ $stats['closed'] }}</div>
+                </div>
+            </div>
         </aside>
     </div>
 
     <section class="panel mt-7 overflow-hidden">
-        <div class="flex items-center justify-between gap-3 border-b border-slate-100 px-5 py-4">
+        <div class="flex flex-col gap-4 border-b border-slate-100 px-5 py-4 md:flex-row md:items-center md:justify-between">
             <div>
                 <h2 class="text-lg font-semibold text-slate-800">Daftar prospek</h2>
                 <p class="text-xs text-slate-500">Lead yang sudah masuk ke sistem</p>
             </div>
+
+            <form method="GET" action="{{ route('prospek') }}" class="grid gap-2 sm:grid-cols-4">
+                <input type="text" name="search" value="{{ request('search') }}" placeholder="Cari nama / sekolah" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
+                <select name="stage" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
+                    <option value="">Semua tahap</option>
+                    <option value="new" {{ request('stage') === 'new' ? 'selected' : '' }}>Baru</option>
+                    <option value="contacted" {{ request('stage') === 'contacted' ? 'selected' : '' }}>Dihubungi</option>
+                    <option value="qualified" {{ request('stage') === 'qualified' ? 'selected' : '' }}>Qualified</option>
+                    <option value="proposal" {{ request('stage') === 'proposal' ? 'selected' : '' }}>Proposal</option>
+                    <option value="closed" {{ request('stage') === 'closed' ? 'selected' : '' }}>Closed</option>
+                </select>
+                <select name="source" class="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100">
+                    <option value="">Semua sumber</option>
+                    @foreach(array_unique($prospects->pluck('source')->filter()->all()) as $source)
+                        <option value="{{ $source }}" {{ request('source') === $source ? 'selected' : '' }}>{{ $source }}</option>
+                    @endforeach
+                </select>
+                <button type="submit" class="tombol-utama">Filter</button>
+            </form>
         </div>
 
         <div class="overflow-x-auto">
@@ -164,6 +192,7 @@
                         <th class="px-5 py-3">Sumber</th>
                         <th class="px-5 py-3">PIC</th>
                         <th class="px-5 py-3">Tahap</th>
+                        <th class="px-5 py-3">Aksi</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">
@@ -178,10 +207,13 @@
                             <td class="px-5 py-3">
                                 <span class="rounded-full bg-blue-50 px-2.5 py-1 text-[11px] font-medium text-blue-700">{{ ucfirst($prospek->stage ?? 'new') }}</span>
                             </td>
+                            <td class="px-5 py-3">
+                                <a href="{{ route('prospek.show', $prospek) }}" class="font-medium text-blue-600 hover:text-blue-700">Lihat detail</a>
+                            </td>
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="4" class="px-5 py-10 text-center text-sm text-slate-500">
+                            <td colspan="5" class="px-5 py-10 text-center text-sm text-slate-500">
                                 Belum ada lead yang tersimpan.
                             </td>
                         </tr>

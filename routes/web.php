@@ -59,6 +59,8 @@ Route::middleware('auth')->group(function () {
     Route::view('/dasbor', 'dasbor')->name('dasbor');
     Route::get('/prospek', [ProspekController::class, 'index'])->name('prospek');
     Route::post('/prospek', [ProspekController::class, 'store'])->name('prospek.store');
+    Route::get('/prospek/{prospek}', [ProspekController::class, 'show'])->name('prospek.show');
+    Route::post('/prospek/{prospek}/status', [ProspekController::class, 'updateStatus'])->name('prospek.status');
 
     foreach (config('modul') as $nama => $modul) {
         if ($nama === 'prospek') {
